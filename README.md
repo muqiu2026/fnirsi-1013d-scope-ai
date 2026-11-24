@@ -39,7 +39,7 @@ This repo ships: the **modified scope firmware source**, the **serial protocol**
 # 1) 装依赖
 pip install pyserial pillow
 
-# 2) 把示波器刷入改造固件（见 docs/FLASHING.md），菜单里打开 USB-Serial mode（见同文档）
+# 2) 刷入改造固件（见 docs/FLASHING.md）；不想自己编译，可直接从 Releases 下载 fnirsi_1013d_control.bin。菜单里打开 USB-Serial mode（见同文档）
 
 # 3) 验证连通（设备管理器里 COM 号按实际改，下列以 COM26 为例）
 python host/scope_ai.py status          # 设置+波形+测量 完整 JSON
