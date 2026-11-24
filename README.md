@@ -21,6 +21,15 @@ This repo ships: the **modified scope firmware source**, the **serial protocol**
 
 ---
 
+## 真实效果对比 · Live vs Rendered
+
+<table><tr>
+<td width="50%"><img src="assets/屏幕实测.png" width="100%" alt="#SHOT 真实LCD整屏"><br><b>#SHOT 真实 LCD 整屏截屏</b><br><sub>设备端 maindisplaybuffer 直读，含菜单/文字/UI</sub></td>
+<td width="50%"><img src="assets/当前波形.png" width="100%" alt="还原波形"><br><b>#WAV2 + #MEAS 还原波形图</b><br><sub>上位机采样重绘，真实电压/时间轴</sub></td>
+</tr></table>
+
+---
+
 ## 1. 硬件与芯片 · Hardware & SoC
 
 | 项 Item | 值 Value |

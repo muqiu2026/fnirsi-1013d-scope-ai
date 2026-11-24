@@ -68,7 +68,15 @@ Commands start with `#`, end with `\n`. `#WAV2` is a long line, `#SHOT` returns 
 - **MCP** (Claude/Cursor): point a client at `mcp/server.py` → tools `scope_info / scope_measure / scope_set / scope_capture / scope_screenshot`. See [`mcp/README.md`](mcp/README.md).
 - **Skill**: hand the `skill/` folder to a skill-capable agent.
 - **CLI / library**: `python scope_ai.py <cmd>` or `from scope_ai import ScopeAI`.
-- **Paste-ready system prompt**: [`docs/AI-PROMPT.md`](docs/AI-PROMPT.md).
+- **Paste-ready system prompt**: [`docs/AI-PROMPT.md`](docs/AI-PROMPT.md) — copy this into any agent:
+
+```
+You can control a FNIRSI / ADS 1013D oscilloscope (Allwinner F1C100S, 800x480 RGB565) over USB serial (VID 0x0483, 2000000 8N1). Commands start with '#' and end with '\n'.
+READ: #VER, #INFO, #MEAS (screen-exact), #READ (320B SysParam), #WAV2,3 (3000 pts), #SHOT (full LCD).
+CONTROL: #SET RUN/STOP/SINGLE/AUTOSET; TDIV,CHx VDIV/ON/OFF/AC/DC/PROBE/POS; TRIG source/mode/edge/LEVEL; LANG CN/EN; #KEY.
+RULES: 1) #SET,STOP before reading/capturing. 2) Trust #MEAS only. 3) Throttle >=0.12s/frame. 4) Don't infer RUN/STOP from SysParam. 5) AUTOSET needs RUN.
+MCP tools: scope_info / scope_measure / scope_set / scope_capture / scope_screenshot.
+```
 
 ## 7. Screenshot caveat
 `#SHOT` works; colors (R/B) and orientation are verified correct. The last ~2048 bytes are stably missing (host fills black). Proved unrelated to packet size/timeout/flush (the firmware already splits). Localization next step: a firmware-side byte counter. See [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md).
