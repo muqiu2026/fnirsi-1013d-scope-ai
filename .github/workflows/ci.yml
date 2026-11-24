@@ -1,0 +1,24 @@
+name: CI
+
+# 无需硬件：自动跑 MCP 自测(注入假设备) + 固件源码语法编译检查，保证拿来即可验证。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: MCP server 自测(无硬件)
+        run: python mcp/test_server.py
+      - name: Python 语法编译检查
+        run: |
+          python -m py_compile skill/scope_ai.py skill/scope_bridge.py skill/render_wave.py
+          python -m py_compile host/scope_ai.py mcp/server.py
+      - name: 协议自检脚本存在性
+        run: test -f skill/verify_protocol.py && echo OK
