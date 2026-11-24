@@ -2,6 +2,8 @@
 
 > 📖 **新手从 [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md) 开始**：开箱 → 刷机 → 认识界面 → 让 AI 接管 → AI 能拿到什么 → 实战演示 → 排错。
 
+> 🧰 **每个软件怎么用（图文并茂，含刷固件用的 `FNIRSI_Firmware_Loader.exe`）见 [`docs/SOFTWARE-GUIDE.md`](docs/SOFTWARE-GUIDE.md)**；预编译固件与刷机工具都在 **Releases**。
+
 > 让 AI / 程序**直接操作**一台 FNIRSI / ADS 1013D 平板示波器，并读取**与屏幕逐字一致**的测量值、波形和整屏截图，实现"边看波形边调硬件"的自动化测试闭环。
 > Give an AI / script full control of a FNIRSI 1013D scope, and read measurement values, waveform samples and the whole LCD screen that match the scope's own display *verbatim*.
 

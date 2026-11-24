@@ -29,7 +29,7 @@
 
 ## 2. 刷机（写入本项目的改造固件）
 
-改造固件相比原厂/上游多了 `#MEAS`（读屏幕测量值）和 `#SHOT`（截整屏）等串口能力。**完整刷机步骤见 [`docs/FLASHING.md`](FLASHING.md)**，这里给要点：
+改造固件相比原厂/上游多了 `#MEAS`（读屏幕测量值）和 `#SHOT`（截整屏）等串口能力。**完整刷机步骤见 [`docs/FLASHING.md`](FLASHING.md)**，刷固件工具 `FNIRSI_Firmware_Loader.exe` 的图文用法见 [`docs/SOFTWARE-GUIDE.md`](SOFTWARE-GUIDE.md)（该 exe 已打包在本仓库 **Releases**）。这里给要点：
 
 1. **先备份**：SD 卡整盘镜像 + 原固件 .bin 各存一份（刷机有变砖风险）。
 2. **构建固件**（可选，直接用 Release 里的 .bin 也行）：
