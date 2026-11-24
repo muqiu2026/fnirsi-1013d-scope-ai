@@ -1,0 +1,70 @@
+================================================
+ADS1013D 升级到 USB CDC 串口固件（实现 PC 实时波形）
+================================================
+
+【当前问题】
+你现在的固件 USB 是 U 盘模式（MSC），电脑识别为磁盘，没有 COM 串口。
+PC 实时波形 APP 需要串口模式（CDC）才能工作，所以要升级固件。
+
+【选哪个固件？—— 推荐 v0.27r】
+工作区 firmware/ 目录下已下载好几个版本：
+
+  1. fnirsi_1013d_v0.27r_APP.bin  ★★★ 推荐首选
+     来源：GitHub 目录名直接叫 "v0.27r YES work it with APP"
+     含义：作者明确验证过"可以和 APP 一起工作"的版本
+     大小：698440 字节
+
+  2. scope_v0.27u.bin
+     来源：Guide to firmware/firmware_Atlan_Peco/
+     含义：Atlan 在论坛推荐 EP4CE6 用的版本（"Use firmware v1.00o"，
+           但 v0.27u 在 EP4CE6 上也被验证工作正常）
+     大小：322048 字节（这是纯 scope 固件，不含 bootloader）
+
+  3. v028a_fnirsi_1013d.bin
+     较新版本，含 cdc_class.c / PC_interface.c，支持 CDC
+     但作者未特别针对 EP4CE6 优化，作为备选
+
+  建议顺序：先刷 v0.27r → 不行再试 v0.27u → 再不行试 v0.28a
+
+【重要：你的 FPGA 是 EP4CE6】
+  Atlan 在 EEVBlog 明确说过 EP4CE6 的兼容性：
+  - "The dso1.00o firmware is compatible with the standard firmware in the FPGA"
+  - "Use firmware v1.00o. Max number of samples for EP4CE6 is 12000"
+  - 有用户测试 v0.27u 在 EP4CE6 上工作正常
+  所以这些固件理论上都兼容，只是采样深度限 12000（够用）。
+
+【刷机步骤（和上次一样，用 LOADER）】
+  前提：SD 卡现在插在示波器里，直接用示波器的 USB 连接刷，不用拔卡！
+
+  1. 示波器开机 → 菜单 → USB Connection → 打开（现在会识别为 U 盘）
+  2. 电脑上运行 F:\loader_v1.1.3\FNIRSI_Firmware_Loader.exe（或工作区
+     firmware\loader_v1.1.3.zip 解压后的 exe），UAC 点"是"
+  3. 设备下拉框选中 F1C100S 示波器（看清楚设备名，别选错盘！）
+  4. Binary File 选择：firmware\fnirsi_1013d_v0.27r_APP.bin
+  5. 点 "Write to device"，等待完成
+  6. 关 USB，关机，重新开机
+
+【刷完如何验证 CDC 成功】
+  1. 开机 → 菜单 → USB Connection → 打开
+  2. 电脑"设备管理器 → 端口(COM 和 LPT)"里应该出现
+     "USB Serial Device (COMx)" 或类似串口设备
+  ✅ 出现了 → 成功！可以用 PC APP 了
+  ❌ 还是 U 盘 → 换 scope_v0.27u.bin 或 v028a_fnirsi_1013d.bin 重试
+
+【用 PC 实时波形 APP】
+  1. 用 Chrome / Edge 打开
+     firmware\FNIRSI1013D-APP-beta10\FNIRSI1013D-APP-beta10\
+       FNIRSI 1013D-APP-beta10.html
+  2. 点左下角 CONNECT → 选中串口设备
+  3. 点 START → 波形实时显示
+  4. 注意：示波器端要关闭所有菜单，否则 APP 命令会被拦截
+
+【UGLY 提醒】
+  - 刷固件有风险，虽然 LOADER 会保护 MBR 和分区，但选错设备会毁数据
+  - 刷之前最好确认设备名是 F1C100S
+  - 如果刷完开机异常/白屏，用 LOADER 刷回 fnirsi_1013d.bin（首次安装固件）
+
+【来源】
+  GitHub: https://github.com/Atlan4/Fnirsi1013D
+  EEVBlog: https://www.eevblog.com/forum/testgear/fnirsi-1013d-100mhz-tablet-oscilloscope/
+  APP: reply #3376（作者 Hiban，Atlan 适配）

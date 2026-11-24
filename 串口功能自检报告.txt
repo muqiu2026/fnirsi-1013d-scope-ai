@@ -1,0 +1,132 @@
+================================================================
+FNIRSI 1013D 串口功能自检报告
+串口: COM26   波特率: 2000000   时间: 2026-11-24 13:01:06
+================================================================
+
+---- 握手 ----
+[有回应]  发送: #VER
+        预期: None
+        实测: V1.3.0C MOD V9B4
+[通过]  发送: #INFO
+        预期: prefix:#OK,
+        实测: #OK,1013D
+[通过]  发送: #ECHO,HELLO
+        预期: #OK,HELLO
+        实测: #OK,HELLO
+
+---- 读取 ----
+[通过]  发送: #READ
+        预期: prefix:#OK, (320字节)
+        实测: #OK, (320字节)
+[通过]  发送: #WAV2,3
+        预期: prefix:#OK, prm=320B CH1=3000点
+        实测: #OK, prm=320B CH1=3000点 CH2=0点
+[通过]  发送: #WAV2,3 波形真实性
+        预期: contains:不同采样值
+        实测: CH1 共 3000 点，11 个不同采样值
+[通过]  发送: #WAV2,2
+        预期: prefix:#ERR,UNKNOWN
+        实测: #ERR,UNKNOWN
+
+---- 调参 ----
+[通过]  发送: #SET,STOP
+        预期: prefix:#OK,
+        实测: #OK,STOP
+[通过]  发送: #SET,RUN
+        预期: prefix:#OK,
+        实测: #OK,RUN
+[通过]  发送: #SET,TDIV,18
+        预期: prefix:#OK,
+        实测: #OK,TDIV
+[通过]  发送: #SET,CH1,VDIV,3
+        预期: prefix:#OK,
+        实测: #OK,VDIV
+[通过]  发送: #SET,CH2,VDIV,2
+        预期: prefix:#OK,
+        实测: #OK,VDIV
+[通过]  发送: #SET,CH2,ON
+        预期: prefix:#OK,
+        实测: #OK,ON
+[通过]  发送: #SET,CH2,OFF
+        预期: prefix:#OK,
+        实测: #OK,OFF
+[通过]  发送: #SET,CH1,AC
+        预期: prefix:#OK,
+        实测: #OK,AC
+[通过]  发送: #SET,CH1,DC
+        预期: prefix:#OK,
+        实测: #OK,DC
+[通过]  发送: #SET,CH1,PROBE,1
+        预期: prefix:#OK,
+        实测: #OK,PROBE
+[通过]  发送: #SET,CH2,PROBE,1
+        预期: prefix:#OK,
+        实测: #OK,PROBE
+[通过]  发送: #SET,TRIG,CH1
+        预期: prefix:#OK,
+        实测: #OK,TRIG
+[通过]  发送: #SET,TRIG,CH2
+        预期: prefix:#OK,
+        实测: #OK,TRIG
+[通过]  发送: #SET,TRIG,AUTO
+        预期: prefix:#OK,
+        实测: #OK,TRIG
+[通过]  发送: #SET,TRIG,NORMAL
+        预期: prefix:#OK,
+        实测: #OK,TRIG
+[通过]  发送: #SET,TRIG,RISE
+        预期: prefix:#OK,
+        实测: #OK,TRIG
+[通过]  发送: #SET,TRIG,FALL
+        预期: prefix:#OK,
+        实测: #OK,TRIG
+[通过]  发送: #SET,LANG,CN
+        预期: prefix:#OK,
+        实测: #OK,CN
+[通过]  发送: #SET,LANG,EN
+        预期: prefix:#OK,
+        实测: #OK,EN
+[通过]  发送: #SET,AUTOSET
+        预期: prefix:#OK,
+        实测: #OK,AUTOSET
+
+---- 新命令 ----
+[通过]  发送: #SET,TRIG,LEVEL,120
+        预期: contains:变化
+        实测: byte[72] trigger_level 128 -> 117 变化
+[通过]  发送: #SET,CH1,POS,100
+        预期: contains:变化
+        实测: byte[80:82] ch1_vert 183 -> 100 变化
+
+---- 键码 ----
+[通过]  发送: #KEY,F
+        预期: prefix:#OK,
+        实测: #OK,KEY
+[通过]  发送: #KEY,A
+        预期: prefix:#OK,
+        实测: #OK,KEY
+[通过]  发送: #KEY,3
+        预期: prefix:#OK,
+        实测: #OK,KEY
+[通过]  发送: #KEY,46
+        预期: prefix:#OK,
+        实测: #OK,KEY
+
+---- 错误 ----
+[通过]  发送: #FOO
+        预期: #ERR,UNKNOWN
+        实测: #ERR,UNKNOWN
+[通过]  发送: #SET,BOGUS
+        预期: #ERR,SET
+        实测: #ERR,SET
+[有回应]  发送: #KEY,ZZ
+        预期: None
+        实测: #ERR,KEY
+
+---- 调参生效 ----
+[通过]  发送: #SET,TDIV,18 改变参数区byte20
+        预期: contains:变化
+        实测: before=14 after=16 变化
+
+----------------------------------------------------------------
+合计: 37/37 通过

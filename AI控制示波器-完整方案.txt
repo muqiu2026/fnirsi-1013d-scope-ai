@@ -1,0 +1,365 @@
+============================================================
+让 AI 真正操作示波器（双向闭环）— 完整方案
+UTNIX / FNIRSI 1013D  tablet 示波器
+============================================================
+
+【这次解决了什么】
+之前只能让 AI "看"波形（读数据）。现在 AI 可以"操作"示波器：
+自己设时基、电压档、触发、开关通道，调好了再看，不满意再调，形成闭环。
+
+你在示波器上要做的只有一件事：刷入新固件。之后所有操作都由 AI 通过串口完成，
+不用再手动按屏幕。
+
+------------------------------------------------------------
+一、为什么必须改固件
+------------------------------------------------------------
+所有开源固件（v0.27r / v0.28a 等）的串口控制命令都是空壳：
+  #SET / #KEY / #RUN / #STOP 收到后只回一句 "#OK"，实际什么都不做。
+这就是之前网页 App 一堆按钮没反应的根本原因 —— 不是电脑问题，是固件没实现。
+
+我核对了 Atlan4 全部源码，确认了这一点，然后：
+  1) 新增 scope_control.c，把控制命令接到固件底层的真实设置函数上
+     （fpga_set_* 写硬件 + scope_* 刷新屏幕），不是伪造触摸坐标（那样会卡死）。
+  2) 改造串口接收函数，让 #SET 真正执行。
+  3) 重新编译 + 打包出可直接刷的固件。
+
+------------------------------------------------------------
+二、固件文件（★ 已刷机实测通过的版本）
+------------------------------------------------------------
+  ★ firmware\fnirsi_1013d_control.bin  — 中文界面 + AI控制（2026-11-24 实测版）
+      大小 713044 字节
+      SHA256: e7804f5ac58baffa8deee5652aea5895aabc04a7f1a4d4900938976433aeae0c
+      界面已汉化：主菜单/设置/校准/触发/通道/提示等 170 条文案；
+      串口功能 37/37 项自检全部通过（#READ 参数区 320 字节、
+      #WAV2,3 真实波形、#SET 全系列调参、#KEY 键码、错误处理）。
+
+    firmware\fnirsi_1013d_cn_control.bin  — 上一版中文固件（未修串口缺陷，别用）
+    （注：每次重新编译 SHA 会变，以文件实际内容为准）
+
+  引导区(0~0x5BC00) 与原固件逐字节一致，只替换了 0x5BC00 处的 scope 程序，
+  尾部签名区保留。打包算法已用原版固件验证过可 100% 复现。
+
+  原来的固件（可回退）：
+    firmware\fnirsi_1013d_v0.27r_APP.bin  — 你当前在用的
+    firmware\fnirsi_1013d.bin             — 首次安装的
+
+------------------------------------------------------------
+三、刷机步骤（和上次一样，只动 SD 卡）
+------------------------------------------------------------
+1. 把示波器通过 USB 接电脑，开机，菜单里打开 USB Connection，
+   让电脑识别到示波器（U 盘模式）。
+2. 二选一，把固件复制到 SD 卡（F 盘）根目录：
+     firmware\fnirsi_1013d_cn_control.bin  （中文界面，推荐）
+     firmware\fnirsi_1013d_control.bin     （英文界面）
+   建议先把它改名为 fnirsi_1013d.bin（LOADER 按这个固定名字写）。
+3. 以管理员身份运行 F:\loader_v1.1.3\FNIRSI_Firmware_Loader.exe
+4. 选择 F1C100S 设备 → 选择固件文件 → 写入。
+5. 关机再开机。如果之前开着 USB-Serial mode，进：
+   System settings → Other settings → USB-Serial mode
+   中文版对应：系统设置 → 其他设置 → USB-Serial mode，确认是开(1)。
+6. 电脑设备管理器应出现 USB Serial Device (COMx)。
+
+回退：重复以上步骤，改刷 firmware\fnirsi_1013d_v0.27r_APP.bin 即可。
+
+------------------------------------------------------------
+四、新固件的串口命令（AI 用）
+------------------------------------------------------------
+运行状态：
+  #SET,RUN        运行
+  #SET,STOP       停止
+  #SET,SINGLE     单次
+  #SET,AUTOSET    自动设置（硬件自己的 autoset）
+
+时基：
+  #SET,TDIV,<i>   i=0..34，对应 time_div_texts：
+                  0=50s/div ... 11=200ms/div ... 18=1ms/div ... 34=5ns/div
+
+通道：
+  #SET,CH1,ON / OFF      通道开关
+  #SET,CH1,AC / DC       耦合
+  #SET,CH1,VDIV,<i>      i=0..6（1x 探头）：0=5V 1=2.5V 2=1V 3=500mV
+                         4=200mV 5=100mV 6=50mV per div
+  #SET,CH1,PROBE,<i>     0=0.5x 1=1x 2=10x 3=20x 4=50x 5=100x 6=1000x
+  （CH2 同上，把 CH1 换成 CH2）
+
+触发：
+  #SET,TRIG,CH1 / CH2        触发源
+  #SET,TRIG,AUTO/NORMAL/SINGLE  触发模式
+  #SET,TRIG,RISE / FALL       边沿
+  #SET,TRIG,LEVEL,<y>         触发电平（屏幕 Y 6..396，等价于拖动触发电平标记）
+                              固件内部按屏幕坐标换算成 FPGA 电平 0..255
+                              （128 = 波形中心），读回见参数区 byte[72]
+
+垂直位置（等价于用手指拖动波形，触发在该通道上时触发标记会跟着走）：
+  #SET,CH1,POS,<y>           CH1 波形垂直位置（屏幕 Y 6..396）
+  #SET,CH2,POS,<y>           CH2 同上
+
+界面语言（只有中文版固件能真正切出中文；英文版收到也只回 ACK）：
+  #SET,LANG,CN / ZH          切到中文
+  #SET,LANG,EN               切回英文
+  #SET,LANG,TOGGLE           中英切换
+
+读取：
+  #WAV2,3   请求一帧波形（返回 #OK,<参数HEX>,<CH1 HEX>,<CH2 HEX>）
+            参数HEX = 320 字节 SysParam；CH1/CH2 各 4801 个采样点（HEX）
+  #READ     只读参数（320 字节，逗号分隔 HEX）
+  #VER / #INFO / #ECHO,<text>  保留命令
+
+兼容旧网页 App 的按键（单字符按 ASCII 码解释，也兼容两位十六进制写法）：
+  #KEY,F  运行/停止切换        （等价 #KEY,46）
+  #KEY,A  自动设置            （等价 #KEY,41）
+  #KEY,3  单次                （等价 #KEY,33）
+  #KEY,B / #KEY,4  CH1 电压档 +/-；#KEY,C / #KEY,D 时基 +/-
+
+所有命令都要以换行 \n 结尾。成功回 #OK,xxx，失败回 #ERR,UNKNOWN / #ERR,SET。
+
+------------------------------------------------------------
+五、AI 封装层：scope_ai.py
+------------------------------------------------------------
+这是给 AI（或你）直接调用的语义化接口，AI 不用记上面那些底层命令。
+
+Python 里：
+  from scope_ai import ScopeAI
+  s = ScopeAI()                       # 自动找串口
+  s.set_timebase("1ms")               # 人话设时基
+  s.set_vdiv("CH1", "500mV")          # 人话设电压档
+  s.set_channel("CH2", True)
+  s.set_trigger(source="CH1", mode="AUTO", edge="RISE")
+  s.set_trigger_level(200)            # 触发电平（屏幕 Y 6..396）
+  s.set_channel_position("CH1", 180)  # 波形垂直位置（屏幕 Y 6..396）
+  s.autoset()
+  d = s.capture()                     # 采集 -> 结构化数据
+  p = s.params()                      # 读回参数区(320字节) -> 字典
+  print(s.report())                   # AI 可读报告
+  s.language(True)                    # 切中文界面（中文版固件）
+  s.language(False)                   # 切回英文界面
+
+  # 一句话让示波器显示目标信号（自动算时基和电压档）
+  s.view("2kHz 3.3V 方波")
+
+命令行（AI 用 subprocess 调）：
+  python scope_ai.py list                         列出串口
+  python scope_ai.py status                       当前状态+波形 (JSON)
+  python scope_ai.py set timebase 1ms
+  python scope_ai.py set vdiv CH1 500mV
+  python scope_ai.py set trigger CH1 AUTO RISE
+  python scope_ai.py view "2kHz 3.3V 方波"        自动调好显示
+  python scope_ai.py capture                      完整波形数据 (JSON)
+  python scope_ai.py report                       AI 可读报告
+  python scope_ai.py language cn                  切中文界面
+  python scope_ai.py language en                  切回英文界面
+
+------------------------------------------------------------
+六、闭环工作流（推荐给 AI 的玩法）
+------------------------------------------------------------
+AI 调试硬件时的典型循环：
+
+ 1. 说明目标：'我要看 MCU 的 3.3V PWM，大约 2kHz'
+ 2. AI 调:    s.view("2kHz 3.3V 方波")
+              → 自动设 100us/div + 1V/div + 上升沿触发
+ 3. AI 读:    d = s.capture()
+ 4. AI 分析:  频率/占空比/Vpp/过冲/噪声
+ 5. 不满意:   s.set_timebase("50us"); s.set_trigger(edge="FALL")
+              再 capture —— 全程不用人手按屏幕
+
+------------------------------------------------------------
+七、文件清单
+------------------------------------------------------------
+  firmware\fnirsi_1013d_cn_control.bin   中文界面 + AI 控制固件（推荐）  ★
+  firmware\fnirsi_1013d_control.bin      英文界面 + AI 控制固件
+  firmware\pack_firmware.py              打包脚本（Python 版 mksunxi+flashfilepacker）
+  firmware\gen_chinese_font.py           按需中文字库生成器（199 字 / 170 条翻译）
+  firmware\chinese_font.c / .h           生成的中文字库与翻译表
+  firmware\repos\Atlan4\Scope v0.28a\scope_control.c   新增的固件控制核心
+  firmware\repos\Atlan4\Scope v0.28a\usb_interface.c   改造的串口接收
+  firmware\repos\Atlan4\Scope v0.28a\display_lib.c     改造的中文渲染层
+  scope_ai.py                            AI 双向控制封装库  ★
+  scope_capture.py / dist\示波器数据捕捉器.exe   只读取波形的双击版（旧方案，仍可用）
+  串口按键控制说明.txt                    按键码与命令说明
+
+------------------------------------------------------------
+八、风险与注意
+------------------------------------------------------------
+- 新固件已在二进制级验证：命令字符串、中文翻译串、按需字库都已编入；scope 段
+  eGON 校验和重算一致；0x5BC00 之前的引导区与 v0.28a 打包模板逐字节相同；
+  尾部 72 字节签名完整保留。但没有真机实测（我这边没有示波器）。
+  刷机前建议保留原固件，按第三节可随时回退。
+- 英文版 scope 段 325168 字节，整包 701048 字节；中文版 scope 段 336464 字节，
+  整包 712344 字节。打包工具会正确处理长度字段和校验和。
+- 中文字库是“按需子集”，不是完整 GB2312：199 个汉字、170 条完整文案。
+  碎片化按钮文字和缩写仍可能保留英文；如真机显示拥挤，告诉我现象我再调表重编。
+- 编译用的 arm-gnu-toolchain 13.2 是临时依赖，交付前已清理 tools\ 目录，
+  不影响固件和 AI 封装的使用。
+- 串口一次只能被一个程序占用：跑 scope_ai 时先关掉网页 App 和数据捕捉器。
+
+------------------------------------------------------------
+九、刷机后请重点验证（5 分钟）
+------------------------------------------------------------
+1. 开机看主菜单：应能看到“系统/设置/查看/触发”等中文；如果仍是英文，
+   先确认刷的是 cn_control 版本，再发 #SET,LANG,CN。
+2. 打开示波器菜单里的 USB-Serial mode，电脑设备管理器出现 COMx。
+3. 关掉网页 App 和数据捕捉器，运行：
+     python scope_ai.py list
+     python scope_ai.py status
+   应能看到状态和一帧波形 JSON。
+4. 试一句控制：
+     python scope_ai.py set vdiv CH1 500mV
+     python scope_ai.py set timebase 1ms
+     python scope_ai.py view "2kHz 3.3V 方波"
+   看屏幕是否真的变化，再 capture 看数据是否对应。
+5. 试语言切换：
+     python scope_ai.py language en
+     python scope_ai.py language cn
+   界面应立即切回英文/中文；若切不过来把现象告诉我。
+6. 有任何文字被裁切、按钮对不上、命令无反应，直接把菜单名或截图文字发我，
+   我按实际显示改翻译表并重编固件。
+
+------------------------------------------------------------
+十、真机实测结果（2026-11-24，已刷机验证）
+------------------------------------------------------------
+串口功能自检：python scope_selftest.py COM26  →  37/37 通过，0 条无回应
+（改造前基线：1/33）
+
+  握手     #VER / #INFO / #ECHO          正常，#VER 无乱码
+  读参数   #READ                        返回 320 字节 SysParam（逗号分隔 HEX）
+  读波形   #WAV2,3                      4 段完整：参数 320B + CH1 4801点 + CH2 4801点
+           波形真实性                    CH1 4801 点含 26 个不同采样值（真实采样，非填充）
+  调参     RUN/STOP/TDIV/VDIV/ON/OFF
+           AC/DC/PROBE/TRIG/LANG        21 条全部 #OK
+  自动设置 #SET,AUTOSET                 正常（耗时约 1.5s）
+  新命令   #SET,TRIG,LEVEL,120          参数区 byte[72]：125 → 141  生效
+           #SET,CH1,POS,100             参数区 byte[80:82]：183 → 100 生效
+  键码     #KEY,F / #KEY,A / #KEY,3
+           #KEY,46                      全部 #OK（单字符与 hex 两种写法都支持）
+  错误处理 #FOO / #SET,BOGUS / #KEY,ZZ  分别回 #ERR,UNKNOWN / #ERR,SET / #ERR,KEY
+
+固件一共修掉 6 类缺陷：
+  1) 回复只入发送缓冲不发出去（缺 usb_CDC_in_ep_callback）—— 串口无响应的主因
+  2) lenCDC 未清零导致同一命令每帧重复执行
+  3) usb_connect 门控（DTR 未置位时静默丢数据）
+  4) bufferCDC 只有 64 字节（USB 包可达 512）→ 溢出风险
+  5) 三处无保护忙等死循环（发送缓冲满 / EP 忙等）
+  6) sysparam 结构体只有 319 字节导致字段错位 + #WAV2,3 越界读 1 字节
+
+AI 封装层（scope_ai.py）也已同步修正三处映射错误：
+  - time_zoom 反查时基（固件约定 time_zoom = 34 - timeperdiv）
+  - ch*_volt_zoom 减 4 才是电压档位下标（否则显示 N/A 且电压测量偏 2 倍）
+  - 探头字段按网页约定 0/1/2 映射回倍率行
+
+------------------------------------------------------------
+十一、屏幕重建与固件真实映射（用真机截图 3.bmp 校准，2026-11-24）
+------------------------------------------------------------
+交付：示波器波形界面重建.html（按 800×480 真机布局逐像素还原）
+工具：python rebuild_scope_view.py COM26（抓帧 → 标定 → 生成）
+
+之前重建版有 6 处系统性错误，已按固件源码修正：
+
+  1. 采样率定标 —— 不能用「时基 × 10 格 ÷ 点数」反推每点时间。
+     variables.c: time_per_div_sample_rate[20] = 8 -> sample_rate[8] = 500000
+     即 200us/div 对应 500KSa/s（2us/点）。500 点周期 = 1ms = 1.00kHz。
+     修正后 Freq / Cycle / Time+ / Time- / Duty+ / Duty- 六项与截图完全一致；
+     旧版误算成 3kHz。
+  2. 显示窗口 —— scope_functions.c:
+       disp_xpos_per_sample = 50 * frequency_per_div / sample_rate   (0.5 px/点)
+       disp_sample_step     = 1 / disp_xpos_per_sample               (= 2)
+     #WAV2,3 每段 4801 字节，前 3000 点是采集缓冲、后 1801 字节是 0x80 填充。
+     屏幕 726px 只用 1452 个采样点画 726 个输出点 = 一屏约 2.9 个周期。
+  3. 交织 ADC —— 缓冲是两路交织（162/148 交替），逐点全画会得到粗黄带；
+     按步长 2 抽样得到干净 1500 点方波，才是真机那条细线。
+  4. 网格 —— menu.c scope_draw_grid(): display_draw_rect(2,48,726,403)，
+     50px 一大格、中心 x=364 / y=249，横向 14.5 格（不是 10 格）。
+  5. Y 轴 —— menu.c scope_draw_pointers(): 通道零点 y = 441 - traceposition，
+     ADC 越大越靠屏幕上方，1 ADC = 400/256 = 1.5625 px。
+  6. Vpp 用平台电平 —— 帧里偶发 6/252 野点会把 min/max 撑到 7.8V；
+     改用高/低电平平台中位数后稳定 3.09~3.47V（截图 3.44V）。
+
+scope_ai.py 因此新增/修正：
+  - 三张固件表 SAMPLE_RATE_HZ / FREQ_PER_DIV / TIME_PER_DIV_SR_IDX
+  - parse_prm() 返回 sample_rate、sample_dt、px_per_sample、screen_points、
+    ch1_zero_y / ch2_zero_y
+  - analyze(ch, scale, dt) 频率/周期/占空比按真实采样率算；
+    Vpp/Umax/Umin 用平台中位数（另保留 vpp_raw）
+  - 返回 freq_hz / cycle_sec / time_pos / time_neg / duty_pos / duty_neg /
+    peak_v / vavg / hi_median / lo_median，report() 同步
+
+与截图仍不一致的只有幅度绝对值：截图是 SAVE PIC 保存的历史画面，
+当时信号直流偏置约 +0.45V，现在约 -0.55V，波形整体下移约 35px。
+页面提供「对齐截图直流」复选框做纯视觉平移，不改动任何测量值。
+另外截图 Urms=660mV 与自身 Vpp=3.44V / 50% 占空比不自洽，
+Vavg=-3.64V 也与 Umax/Umin 矛盾，疑为固件测量项定义差异。
+
+------------------------------------------------------------
+十二、冻结抓帧（推荐，2026-11-24）
+------------------------------------------------------------
+问题：RUN 状态下 #WAV2,3 是"采集缓冲边写边读"，读到的可能是撕裂帧。
+  实测连抓 4 帧，每帧与首帧相差 500+ 字节（3000 点中约 17~20%），
+  Vpp 在 3.53 / 3.09 / 3.06 / 3.16V 间抖动，频率甚至误报 2500Hz。
+  发送 #SET,STOP 之后连抓 4 帧 md5 完全相同、0 字节差异，隔 2.5 秒再抓
+  仍逐字节一致；解冻 1 秒再冻结会换成新帧（证明是真冻结，不是没更新）。
+  固件 ctl_stop() 调 scope_run_stop_button() + refresh_all()，屏幕会显示 STOP。
+
+用法（scope_ai.py 新增）：
+  from scope_ai import ScopeAI
+  s = ScopeAI('COM26')
+
+  d = s.capture_stable()          # 推荐：暂停 -> 3 帧逐字节校验 -> 自动恢复
+                                  # 校验失败抛 RuntimeError，不返回脏数据
+
+  with s.frozen():                # 需要连续多次读数时用
+      a = s.capture(); b = s.capture()    # 两帧逐字节相同
+  # 退出自动恢复原来的运行状态
+
+  python scope_ai.py capture-stable
+  python rebuild_scope_view.py COM26           # 默认冻结抓帧
+  python rebuild_scope_view.py COM26 --live   # 实时抓帧（只在观察变化时用）
+
+语义：
+  - 进入时是 RUN  -> 暂停，读完自动恢复 RUN
+  - 进入时是 STOP -> 保持 STOP，不擅自开机
+  - 可安全嵌套（内层不会重复 STOP，也不会提前恢复）
+  - 返回数据带 frozen / frames_verified / run_original；
+    params.run 回填为「暂停前」的状态（重建的是暂停前那一瞬的画面），
+    并置 params.capture_frozen = True
+
+补充：时基改变时采样率会跟着变（固件 time_per_div_sample_rate 表）。
+  200us/div -> 500KSa/s (2us/点，1kHz 周期 = 500 点)
+  500us/div -> 200KSa/s (5us/点，1kHz 周期 = 200 点)
+  parse_prm() 会自动查表换算，所以频率读数不会因时基改变而错。
+
+------------------------------------------------------------
+十三、用暂停截图 4.bmp 做严格对照 + 电压标定（2026-11-24）
+------------------------------------------------------------
+用户暂停示波器后保存 4.bmp，与冻结抓帧是同一时刻，可严格对照。
+4.bmp 读数：STOP / 200KSa/s / 500us/div / 1.00kHz / 1.00ms /
+  Time± 500us / Duty± 50.0% / Vpp 3.48V / Up 2.18V /
+  Umax 2.18V / Umin -1.32V / Urms 660mV / Vavg -3.64V
+
+冻结抓帧（3 帧逐字节一致）对照结果：
+  时间类 6 项（Freq/Cycle/Time±/Duty±）      完全一致
+  幅度类按理论值 0.03125 V/ADC、零点 128      Vpp 2.78V / Umax 0.63V / Umin -2.16V
+                                              → 偏小约 8%、直流偏约 1.2V
+
+原因（两条，都不是"信号在漂移"）：
+  1. #WAV2,3 返回 FPGA 原始 ADC，屏幕测量面板走固件内部校准链
+     dcoffset / adc1compensation / dc_shift_size，这些量不在 #READ 的 320 字节里。
+  2. 缓冲是两路交织 ADC（偶数 bank 162/61、奇数 bank 148/43），
+     混合取中位数会把平台差压成 89 ADC；必须按步长 2 分 bank 再平均
+     （101 / 105 ADC）。
+
+解决：一次真机电压标定
+  python scope_ai.py calibrate 2.18 -1.32      # 屏幕上的 Umax / Umin
+  → 反推 v_per_adc=0.033981、adc_zero=90.85，存入 scope_cal_volt.json
+  标定后：Up / Umax / Umin 与截图完全一致；Vpp 3.50V vs 3.48V
+          （真机 Umax-Umin=3.50V 与其 Vpp=3.48V 本身就有 0.02V 舍入差）
+  也支持  s.calibrate_voltage(2.18, -1.32)  /  s.clear_voltage_cal()
+  换电压档 / 探头 / 耦合后标定自动失效，需重新标定。
+
+Urms / Vavg 两项无法也不应对齐，因为真机读数自相矛盾：
+  - Vavg=-3.64V 落在 Umin=-1.32V 之外，平均值不可能小于最小值
+  - 3.48Vpp、50% 占空比的对称方波 RMS 应≈1.74V，不可能是 660mV
+  - 3.bmp 与 4.bmp 是不同时刻、Vpp 从 3.44V 变到 3.48V，
+    但这两项都固定是 660mV / -3.64V 纹丝不动
+  → 疑为固件测量项定义或未刷新，属于示波器自身显示问题，不是串口数据错。
+
+页面同步：顶部状态栏按实际 run 显示红色 STOP / 绿色 RUN，
+  波形整体位置可用「对齐截图直流」做纯视觉平移（不改动任何测量值）。

@@ -1,0 +1,14 @@
+{
+  "v_per_adc": 0.03398058252427184,
+  "adc_zero": 90.84571428571428,
+  "umax_ref": 2.18,
+  "umin_ref": -1.32,
+  "hi_adc": 155.0,
+  "lo_adc": 52.0,
+  "ch1_volt_zoom": 6,
+  "ch1_probe": 0,
+  "ch1_coupling": 0,
+  "ch1_vdiv": "1V/div",
+  "channel": "CH1",
+  "time": "2026-11-24 09:32:52"
+}

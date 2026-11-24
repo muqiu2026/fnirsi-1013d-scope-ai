@@ -1,0 +1,80 @@
+ADS1013D / FNIRSI 1013D 开源固件 菜单中英对照表
+
+说明：Atlan 开源固件只有英文，无法切换中文（作者已确认）。
+需要中文界面时，拔掉 SD 卡开机即回到原厂固件。
+
+【基本操作】
+  MENU                    菜单
+  RUN/STOP                运行 / 停止
+  AUTOSET                 自动设置
+  CTRL                    控制（切换屏幕侧边按钮页）
+  CH1 / CH2               通道 1 / 通道 2
+  Open CH1 / Open CH2     打开通道 1 / 打开通道 2
+  ON / OFF                开启 / 关闭
+
+【通道设置】
+  Coupling: DC / AC       耦合方式：直流 / 交流
+  Probe: 1X / 10X / 100X  探头倍率
+  V/div                   垂直档位（伏/格）
+  V+ / V-                 垂直档位增减
+  Invert                  反相
+  Ground position         接地位置
+
+【触发】
+  Trig Mode               触发模式
+    Auto                  自动
+    Single                单次
+    Normal                正常
+  Trigger level           触发电平
+  Rising / Falling        上升沿 / 下降沿
+  Source: CH1 / CH2       触发源
+
+【时基】
+  Time/div                水平时基（秒/格）
+  Roll mode               滚动模式（慢时基）
+  Horizontal position     水平位移
+
+【测量】
+  MEASURES                测量菜单
+  Vmax / Vmin             最大值 / 最小值
+  Vavg                    平均值
+  Vrms                    有效值
+  VPP                     峰峰值
+  VP                      峰值
+  Freq                    频率
+  Cycle / Period          周期
+  Tim+ / Tim-             正脉宽 / 负脉宽
+  Duty+ / Duty-           正占空比 / 负占空比
+
+【光标】
+  TIME CURSOR             时间光标（测时间差/频率）
+  V CURSOR                电压光标（测电压差）
+
+【存储】
+  SAVE PIC                保存截图
+  SAVE WAVE               保存波形数据
+  Picture View            图片查看
+  Waveform View           波形查看（可再分析、光标测量）
+  Delete                  删除
+  Page Up / Page Down     上一页 / 下一页
+
+【系统】
+  System settings         系统设置
+  Screen brightness       屏幕亮度
+  Grid brightness         网格亮度
+  RTC                     实时时钟（需另焊模块）
+  Calibration             校准
+  Diagnostic              诊断
+  USB Connection          USB 连接（连电脑）
+  UPDATE                  升级（固件更新，从开机界面进）
+
+【FFT / 其他】
+  FFT                     快速傅里叶变换（频谱）
+  X-Y mode                X-Y 模式（李萨如图形）
+  Signal generator        信号发生器（部分 FPGA 固件支持）
+  Ref1 - Ref8             参考波形存储位
+
+【PC 实时波形】
+  固件需为 v0.27i 及以上（USB CDC 串口模式），或用 1.00o 系列。
+  在示波器菜单打开 USB Connection，PC 端运行 FNIRSI1013D-APP 即可实时看波形。
+  注意：上位机为实验性质，刷新率与采样深度有限。

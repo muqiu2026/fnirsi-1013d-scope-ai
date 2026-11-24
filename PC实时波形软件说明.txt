@@ -1,0 +1,47 @@
+ADS1013D PC 实时波形上位机 使用说明
+
+【软件位置】
+  firmware/FNIRSI1013D-APP-beta10.zip  （原压缩包）
+  firmware/FNIRSI1013D-APP-beta10/FNIRSI1013D-APP-beta10/
+      FNIRSI 1013D-APP-beta10.html    （主程序，浏览器打开）
+      oscilloscope_custom.ttf          （字体，必须和 html 放一起）
+      README.txt                       （原版英文说明）
+
+【重要：浏览器要求】
+  这个软件是网页应用，通过 Web Serial API 访问 USB 串口。
+  必须使用 Chrome 或 Edge 浏览器（版本 89 以上）。
+  不支持 Firefox / Safari。
+  必须用 file:// 或 https:// 打开——直接双击 html 文件（file://）在 Chrome/Edge 里通常可用。
+
+【使用前：示波器端设置】
+  1. 确认固件版本支持 USB CDC：v0.27i 及以上，或 1.00o 系列。
+     （你刷的 fnirsi_1013d.bin 首次安装固件版本较老，可能没有 CDC。
+      若菜单里 USB 连接后电脑识别为 U 盘而不是串口，需要先升级固件到 v0.27s 或 1.00o）
+  2. 用 USB 数据线连接示波器和电脑。
+  3. 示波器开机 → 菜单 → USB Connection → 打开。
+  4. 在电脑"设备管理器 → 端口(COM 和 LPT)"里确认出现一个新的 COM 口
+     （类似 USB Serial Device (COMx)）。如果没有，说明固件不支持 CDC，需先升级。
+
+【操作步骤】
+  1. 用 Chrome / Edge 打开 FNIRSI 1013D-APP-beta10.html
+  2. 点左下角 "CONNECT" 按钮
+  3. 在弹出的窗口里选择示波器的串口设备，点"连接"
+  4. 点左下角 "START" 按钮
+  5. 波形就会实时显示在电脑上了
+
+【关键注意事项】
+  - 示波器端必须关闭所有菜单，否则 APP 发送的命令会被菜单拦截，导致失灵。
+  - 如果连接后画面卡住：在示波器菜单里关掉 USB 串口再打开，APP 会恢复。
+  - 这是实验性软件（beta10），原本是给 DSO2512G 写的，Atlan 修改后适配 1013D。
+    功能不完整，可能有 bug，别指望它替代真正的示波器操作。
+  - 刷新率和采样深度有限（受 USB CDC 带宽和固件 3000 点采样限制）。
+
+【固件升级到支持 CDC 的版本（如果需要）】
+  如果当前固件 USB 是 U 盘模式（MSC）而不是串口（CDC），需要升级：
+  1. 从 GitHub Atlan4/Fnirsi1013D 的 "Scope v0.28a" 或 "Verzia 1.xxx" 目录取固件
+  2. 用 LOADER 写入 SD 卡（方法和之前刷机一样）
+  3. 开机后 USB 连接就会变成串口模式
+
+【来源】
+  APP: EEVBlog 论坛 FNIRSI-1013D 帖 reply #3376（作者 Hiban，Atlan 适配）
+  固件: https://github.com/Atlan4/Fnirsi1013D

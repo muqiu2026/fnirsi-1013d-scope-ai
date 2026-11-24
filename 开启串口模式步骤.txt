@@ -1,0 +1,66 @@
+================================================
+为什么还是 U 盘？—— 需要在菜单里打开 USB-Serial mode
+================================================
+
+【原因】
+固件刷对了，但 USB 模式默认是 U 盘（MSC）。
+open source 固件里有个开关叫 "USB-Serial mode"（源码变量 USB_CH340），
+默认关闭 = U 盘模式；打开后 = 串口模式（CDC），电脑才会出现 COM 口。
+
+我从 v0.27r 固件源码（menu.c）里确认了这个开关的存在和位置：
+  scope_system_settings_other_settings_CH340_mode_item()
+  display_text(x+66, y+8, "USB-Serial mode");
+
+【操作步骤 —— 在示波器上操作，不用电脑】
+
+第 1 步：进入系统设置
+  在主界面按 MENU（菜单）→ 找到 "System settings"（系统设置）→ 进入
+
+第 2 步：进入 Other settings（其他设置）
+  在系统设置里找到 "Other settings"（可能需要按 CTRL 切换按钮页找）
+  进入后是一个列表菜单
+
+第 3 步：找到 "USB-Serial mode"
+  列表从上到下依次是：
+    1. Boot menu
+    2. Default start
+    3. New autosetup
+    4. Lock move cursors
+    5. DC shift calibration
+    6. USB-Serial mode   ← 滑动开关，把它从 OFF 拨到 ON（绿色）
+    7. Dev mode
+    8. Add a tag to BMP
+    9. Load Ref on start
+
+第 4 步：重启示波器
+  关机 → 开机（必须重启设置才生效）
+
+第 5 步：连接电脑
+  菜单 → USB Connection 打开
+  这时电脑设备管理器"端口(COM 和 LPT)"里应该出现
+  "USB Serial Device (COMx)" 或 "CH340" 之类的串口设备
+  ✅ 成功！
+
+【如果找不到 Other settings 菜单】
+  - 按 CTRL 键切换屏幕侧的按钮页，找 "Other" 或 "Other settings" 按钮
+  - 系统设置菜单可能需要翻页
+
+【打开后仍然没有串口？】
+  1. 确认重启过了（必须关机再开机）
+  2. 确认 USB 数据线是能传数据的（不是只能充电的）
+  3. 设备管理器里看"端口(COM 和 LPT)"整个分类，找 USB Serial Device
+  4. 试试换一个 USB 口
+  5. 论坛提到：有时需要同时开 "Dev mode"（就在 USB-Serial mode 下面一行）
+
+【打开串口后，用 PC APP 看波形】
+  1. 用 Chrome / Edge 打开：
+     firmware\FNIRSI1013D-APP-beta10\FNIRSI1013D-APP-beta10\FNIRSI 1013D-APP-beta10.html
+  2. 点左下角 CONNECT → 选中串口设备 → 允许
+  3. 点 START → 波形实时显示
+  4. 示波器端要关掉所有菜单，否则 APP 的控制命令会被拦截
+
+【来源】
+  从固件源码 menu.c 第 6491-6507 行确认：
+  scope_system_settings_other_settings_CH340_mode_item()
+  USB_CH340 变量：0=MSC(U盘), 1=Serial(串口)
+  EEVBlog reply #3452：Atlan 说 "turn on the serial port and dev mode in the menu"

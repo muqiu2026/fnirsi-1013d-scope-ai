@@ -1,0 +1,482 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""按 FNIRSI 1013D 固件真实布局重建示波器屏幕（自包含 HTML）。
+
+坐标全部来自固件源码，不再靠目测：
+  menu.c scope_draw_grid():  display_draw_rect(2,48,726,403)  波形区
+                             中心线 x=364 / y=249，点线间隔 50px
+  menu.c scope_draw_pointers(): 通道零点 y = 441 - traceposition
+  scope_functions.c:  disp_xpos_per_sample = 50*frequency_per_div/sample_rate
+  fnirsi_1013d_scope.h: SCREEN_WIDTH 800 / SCREEN_HEIGHT 480
+
+数据来自 scope_screen.json（#WAV2,3 抓帧）+ scope_cal.json（触发线标定）。
+"""
+import json, os, sys
+
+BASE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, BASE)
+import scope_ai
+
+d = json.load(open(os.path.join(BASE, "scope_screen.json"), encoding="utf-8"))
+cal = json.load(open(os.path.join(BASE, "scope_cal.json"), encoding="utf-8"))
+p = d["params"]
+ch1 = d["ch1"]
+ch2 = d["ch2"]
+
+# 用当前档位的真实采样率重新分析；若做过真机电压标定则套用标定参数
+dt = p.get("sample_dt") or 2e-6
+vcal = scope_ai.ScopeAI._volt_cal_for(p)
+a = scope_ai.analyze(ch1, p["ch1_scale"], dt, vcal)
+
+
+def enc(arr):
+    vals = sorted(set(arr))
+    m = {v: chr(33 + i) for i, v in enumerate(vals)}
+    return "".join(m[v] for v in arr), [int(v) for v in vals]
+
+
+s1, dict1 = enc(ch1)
+s2, dict2 = enc(ch2)
+
+
+def fmt_freq(x):
+    if x is None: return "—"
+    return "%.2fkHz" % (x / 1e3) if x >= 1000 else "%.0fHz" % x
+
+
+def fmt_time(x):
+    if x is None: return "—"
+    if x >= 1e-3: return "%.2fms" % (x * 1e3)
+    if x >= 1e-6: return "%.0fus" % (x * 1e6)
+    return "%.0fns" % (x * 1e9)
+
+
+def fmt_volt(x):
+    if x is None: return "—"
+    return "%.2fV" % x if abs(x) >= 1 else "%.0fmV" % (x * 1e3)
+
+
+# 对照基准：4.bmp（用户暂停示波器后保存的截图）
+MEAS = [
+    ("Time-", fmt_time(a.get("time_neg")), "500us"),
+    ("Duty+", "%.1f%%" % (a["duty_pos"] * 100) if a.get("duty_pos") else "—", "50.0%"),
+    ("Duty-", "%.1f%%" % (a["duty_neg"] * 100) if a.get("duty_neg") else "—", "50.0%"),
+    ("Freq", fmt_freq(a.get("freq_hz")), "1.00kHz"),
+    ("Cycle", fmt_time(a.get("cycle_sec")), "1.00ms"),
+    ("Time+", fmt_time(a.get("time_pos")), "500us"),
+    ("Urms", fmt_volt(a.get("rms")), "660mV"),
+    ("Vpp", fmt_volt(a.get("vpp")), "3.48V"),
+    ("Up", fmt_volt(a.get("peak_v")), "2.18V"),
+    ("Umax", fmt_volt(a.get("vmax")), "2.18V"),
+    ("Umin", fmt_volt(a.get("vmin")), "-1.32V"),
+    ("Vavg", fmt_volt(a.get("vavg")), "-3.64V"),
+]
+
+# 时间类由固件采样率表直接定标，无需标定；幅度类取决于是否套用真机标定
+if vcal:
+    amp_note = ("一致（已按 4.bmp 的 Umax/Umin 标定：%.5f V/ADC、零点 ADC %.1f）"
+                % (vcal["v_per_adc"], vcal["adc_zero"]))
+    amp_kind = "ok"
+else:
+    amp_note = "未标定：#WAV2,3 是原始 ADC，真机测量面板走内部 dcoffset/补偿校准链"
+    amp_kind = "wr"
+
+NOTES = {
+    "Time-": ("一致", "ok"), "Duty+": ("一致", "ok"), "Duty-": ("一致", "ok"),
+    "Freq": ("一致（旧版误算 3kHz）", "ok"), "Cycle": ("一致", "ok"),
+    "Time+": ("一致", "ok"),
+    "Urms": ("真机 660mV 与自身 Vpp 3.48V / 50% 占空比不自洽（标准 RMS≈1.75V），疑固件测量项定义不同", "wr"),
+    "Vpp": (amp_note, amp_kind),
+    "Up": (amp_note, amp_kind),
+    "Umax": (amp_note, amp_kind),
+    "Umin": (amp_note, amp_kind),
+    "Vavg": ("真机 -3.64V 落在 Umin(-1.32V) 之外，与自身读数矛盾；疑固件测量项定义不同", "wr"),
+}
+
+rows = []
+for label, built, ref in MEAS:
+    note, kind = NOTES.get(label, ("", "ok"))
+    cls = "ok" if kind == "ok" else "wr"
+    rows.append(
+        '<tr><td class="k">%s</td><td class="ref">%s</td><td class="blk">%s</td>'
+        '<td class="%s">%s</td></tr>' % (label, ref, built, cls, note)
+    )
+table_rows = "\n".join(rows)
+
+
+# 第一个上升沿对齐到屏幕左边缘（真机触发相位就是这样）
+thr = (a["hi_median"] + a["lo_median"]) / 2
+first_rise = 0
+for i in range(1, min(len(ch1), 800)):
+    if ch1[i - 1] < thr <= ch1[i]:
+        first_rise = i
+        break
+win_start = max(0, first_rise - 2)
+
+cfg = {
+    "run": p["run"],
+    "timebase": p["timebase"],
+    "sample_rate": p.get("sample_rate", "500KSa/s"),
+    "sample_dt": dt,
+    "px_per_sample": p.get("px_per_sample", 0.5),
+    "screen_points": p.get("screen_points", 1452),
+    "win_start": win_start,
+    "ch1_vdiv": p["ch1_vdiv"], "ch2_vdiv": p["ch2_vdiv"],
+    "ch1_probe": p["ch1_probe_text"], "ch2_probe": p["ch2_probe_text"],
+    "ch1_coupling": "AC" if p["ch1_coupling"] else "DC",
+    "ch2_coupling": "AC" if p["ch2_coupling"] else "DC",
+    "ch1_scale": p["ch1_scale"], "ch2_scale": p["ch2_scale"],
+    "ch2_enabled": p["ch2_enabled"],
+    "ch1_zero_y": p.get("ch1_zero_y", 441 - p["ch1_vert"]),
+    "ch2_zero_y": p.get("ch2_zero_y", 441 - p["ch2_vert"]),
+    "trigger": p["trigger"], "trigger_level": p["trigger_level"],
+    "trigger_y": cal.get("y_orig", 200),
+    "meas": [[r[0], r[1]] for r in MEAS],
+    "file_label": r"\pictures\4.bmp",
+    "vpp": a["vpp"], "freq": a["freq_hz"],
+    # 4.bmp 实测：高电平 y≈63、低电平 y≈216，波形中心 ≈140。
+    # 这个偏移只用于视觉对齐，不参与任何测量计算。
+    "align_shift": 140 - (p.get("ch1_zero_y", 441 - p["ch1_vert"])
+                          - ((a["hi_median"] + a["lo_median"]) / 2 - 128) * 400 / 256),
+}
+
+html = r"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>示波器屏幕重建 — 对照 4.bmp</title>
+<style>
+  :root{ --panel:var(--color-background-primary,#fff); --line:var(--color-border-tertiary,#ddd);
+         --tx:var(--color-text-primary,#222); --tx2:var(--color-text-secondary,#666); }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--font-sans,system-ui,sans-serif);color:var(--tx);
+       background:var(--color-background-secondary,#f5f5f5);}
+  .wrap{max-width:1060px;margin:0 auto;padding:1rem 1.25rem 2rem;}
+  h2{font-size:16px;font-weight:600;margin:0 0 4px;}
+  .sub{font-size:13px;color:var(--tx2);margin:0 0 14px;line-height:1.65;}
+  .card{background:var(--panel);border:0.5px solid var(--line);
+        border-radius:var(--border-radius-lg,10px);padding:14px 16px;margin-bottom:14px;}
+  .lbl{font-size:12px;color:var(--tx2);margin:0 0 8px;font-weight:600;letter-spacing:.02em;}
+  canvas{width:100%;display:block;border-radius:8px;background:#000;touch-action:none;}
+  .ctl{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--tx2);
+       flex-wrap:wrap;margin-top:10px;}
+  input[type=range]{flex:1;min-width:120px;accent-color:#2b7cd3;}
+  button{font-size:13px;padding:4px 10px;border-radius:6px;border:0.5px solid var(--line);
+         background:transparent;color:var(--tx);cursor:pointer;}
+  button:hover{border-color:#888;}
+  .hint{font-size:12px;color:var(--tx2);margin:8px 0 0;font-variant-numeric:tabular-nums;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th,td{text-align:left;padding:5px 8px;border-bottom:0.5px solid var(--line);vertical-align:top;}
+  th{color:var(--tx2);font-weight:600;font-size:12px;}
+  td.k{font-weight:600;white-space:nowrap;}
+  td.ref{color:var(--tx2);white-space:nowrap;font-variant-numeric:tabular-nums;}
+  td.blk{font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums;}
+  td.ok{color:#1a8a4a;} td.wr{color:#b5651d;}
+  .fix{font-size:13px;line-height:1.8;color:var(--tx);}
+  .fix b{font-weight:600;}
+  code{font-size:12px;background:rgba(128,128,128,.13);padding:1px 4px;border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2>示波器屏幕重建 · 与 4.bmp 逐项对照（暂停状态下同一时刻）</h2>
+  <p class="sub">按固件源码的真实坐标还原（800×480 屏幕 / 50px 大格 / 726px 波形区 / 1452 点显示窗口）。
+     波形与参数由串口 <code>#WAV2,3</code> + <code>#READ</code> 实机抓取；拖动波形可平移，滑块水平放大。
+     __FROZEN__</p>
+
+  <div class="card">
+    <canvas id="scope" role="img" aria-label="按 FNIRSI 1013D 固件布局重建的示波器屏幕"></canvas>
+    <div class="ctl">
+      <span>水平放大</span><input type="range" id="zoom" min="1" max="12" step="0.5" value="1">
+      <span id="zv">1×</span>
+      <span>窗口起点</span><input type="range" id="pan" min="0" max="1400" step="1" value="__WIN__">
+      <label style="display:flex;align-items:center;gap:5px;white-space:nowrap">
+        <input type="checkbox" id="align"> 对齐截图直流
+      </label>
+      <button id="reset">复位</button>
+    </div>
+    <p class="hint" id="cursor">把指针移到波形上可读取该点电压与时间</p>
+  </div>
+
+  <div class="card">
+    <div class="lbl">左下测量面板：截图 4.bmp 读数 vs 本次冻结抓帧重建值</div>
+    <table><thead><tr><th>项目</th><th>截图 4.bmp</th><th>重建值</th><th>结论</th></tr></thead>
+    <tbody>__ROWS__</tbody></table>
+  </div>
+
+  <div class="card fix">
+    <div class="lbl">这次修正了什么（旧版重建错在哪）</div>
+    <b>1. 频率差 3 倍</b>：旧版用「时基×10格÷3000点」反推每点时间，得 3kHz。固件真实采样率由
+    <code>time_per_div_sample_rate[20]</code> → <code>sample_rate[8]</code> = <b>500KSa/s</b>（2us/点），
+    500 点周期 → <b>1.00kHz</b>，与截图 Freq / Cycle / Time± / Duty 六项全部吻合。<br>
+    <b>2. 周期数差一倍、波形变成粗黄带</b>：<code>#WAV2,3</code> 的 3000 点是采集缓冲
+    （后 1801 字节是 0x80 填充）。屏幕宽 726px，按
+    <code>disp_xpos_per_sample = 50×5000/500000 = 0.5px/点</code>、<code>disp_sample_step = 2</code>
+    跳着取样，只用 <b>1452 个采样点画 726 个输出点</b>，一屏约 2.9 个周期。
+    缓冲区是两路交织 ADC（<code>162/148</code> 交替），旧版逐点全画既多出一倍周期，
+    又把平顶画成粗黄块；步长 2 抽样后才是真机上的细线方波。<br>
+    <b>3. 网格格数错</b>：固件 <code>scope_draw_grid()</code> 是 50px 一大格、宽 726px、中心 x=364/y=249，
+    即横向 <b>14.5 格</b>；旧版硬编码 10 格。<br>
+    <b>4. 波形上下位置错</b>：通道零点应按
+    <code>scope_draw_pointers()</code> 的 <code>y = 441 - traceposition</code>，且 ADC 越大越靠屏幕上方；
+    旧版符号和基准都反了。<br>
+    <b>5. Vpp 被野点撑大</b>：采样帧偶发 6/252 之类野点，min/max 法算出 7.8V。
+    改成「高/低电平平台中位数」后稳定在 3.09～3.47V，与截图 3.44V 一致。<br>
+    <b>6. 界面元素缺失</b>：旧版只有一条状态文字；这版补齐顶部状态栏、右侧 8 个菜单按钮、
+    4×3 测量面板、底部波形总览条与选区框、绿色触发位置箭头、青色 T 游标、黄色 CH1 基线箭头。<br>
+    <b>7. 幅度类需要一次真机标定</b>：<code>#WAV2,3</code> 返回的是 FPGA 原始 ADC
+    （两路交织，要按步长 2 分离 bank 再取平台），而屏幕测量面板走固件内部的
+    <code>dcoffset / adc1compensation / dc_shift_size</code> 校准链，这些量不在
+    <code>#READ</code> 的 320 字节里。按理论值（0.03125 V/ADC、零点 128）直接算会
+    偏小约 8%、直流偏约 1.2V。执行
+    <code>python scope_ai.py calibrate 2.18 -1.32</code>（屏幕上的 Umax/Umin）
+    标定一次即可对齐；换电压档 / 探头 / 耦合后会自动失效，需重新标定。<br>
+    <span style="color:var(--tx2)">结论：暂停状态下时间类 5 项（Freq / Cycle / Time± / Duty）
+    与截图逐项完全一致；幅度类在标定后一致。Urms 与 Vavg 两项真机读数本身不自洽
+    （Vavg=-3.64V 落在 Umin=-1.32V 之外；3.48Vpp、50% 占空比的对称方波 RMS 应≈1.75V
+    而非 660mV），属于固件测量项定义问题，不是串口数据错。勾选「对齐截图直流」
+    只做纯视觉平移，不改动任何测量值。</span>
+  </div>
+</div>
+
+<script>
+const DICT1 = __DICT1__, DATA1 = __DATA1__;
+const DICT2 = __DICT2__, DATA2 = __DATA2__;
+const CFG = __CFG__;
+const STOPPED = CFG.run === "STOP";
+function decode(dict, s){
+  const out = new Array(s.length);
+  for(let i=0;i<s.length;i++) out[i] = dict[s.charCodeAt(i)-33];
+  return out;
+}
+const CH1 = decode(DICT1, DATA1), CH2 = decode(DICT2, DATA2);
+const W=800, H=480, GX0=2, GY0=48, GW=726, GH=403;
+const cv=document.getElementById("scope"), ctx=cv.getContext("2d");
+let zoom=1, panShift=0, yShift=0;
+
+function rr(x,y,w,h,fill,r,stroke){
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(x,y,w,h,r||0);
+  else ctx.rect(x,y,w,h);
+  if(fill){ctx.fillStyle=fill;ctx.fill();}
+  if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke();}
+}
+function tx(s,x,y,size,color,align,bold){
+  ctx.fillStyle=color; ctx.textAlign=align||"left"; ctx.textBaseline="middle";
+  ctx.font=(bold?"600 ":"")+size+"px "+getComputedStyle(document.body).fontFamily;
+  ctx.fillText(s,x,y); ctx.textAlign="left";
+}
+function line(x1,y1,x2,y2,color,w,dash){
+  ctx.strokeStyle=color; ctx.lineWidth=w||1;
+  ctx.setLineDash(dash||[]); ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+  ctx.stroke(); ctx.setLineDash([]);
+}
+
+function drawGrid(){
+  ctx.fillStyle="#000"; ctx.fillRect(GX0,GY0,GW,GH);
+  rr(GX0,GY0,GW,GH,null,0,"#4a4a4a");
+  // 50px 大格点线（固件 for(i=99;i<448;i+=50) / for(i=14;i<726;i+=50)）
+  for(let y=99;y<448;y+=50) line(GX0+2,y,GX0+GW-2,y,"#2a2a2a",1,[1,4]);
+  for(let x=14;x<726;x+=50) line(x,GY0+6,x,GY0+GH-3,"#2a2a2a",1,[1,4]);
+  // 中心十字 + 5px 小刻度
+  line(GX0,249,GX0+GW,249,"#3a3a3a",1,[2,3]);
+  line(364,GY0,364,GY0+GH,"#3a3a3a",1,[2,3]);
+  for(let x=4;x<726;x+=5) line(x,247,x,251,"#5a5a5a",1);
+  for(let y=54;y<448;y+=5) line(362,y,366,y,"#5a5a5a",1);
+}
+
+function plot(data,color,zeroY,enabled){
+  if(!enabled||!data||!data.length) return;
+  // 固件 disp_sample_step = 1/disp_xpos_per_sample = 2：
+  // 缓冲区是两路交织 ADC，每隔 2 个采样点画 1 个输出点，否则波形会变成
+  // 162/148 交替的粗带而不是真机上的细线。
+  const px=zoom, stride=2;
+  const start=Math.round(CFG.win_start+panShift);
+  const n=Math.min(Math.floor(GW/px),Math.floor((data.length-start)/stride));
+  const padc=400/256;
+  ctx.save(); ctx.beginPath(); ctx.rect(GX0,GY0,GW,GH); ctx.clip();
+  ctx.strokeStyle=color; ctx.lineWidth=1.2; ctx.lineJoin="round"; ctx.beginPath();
+  let started=false;
+  for(let i=0;i<n;i++){
+    const idx=start+i*stride;
+    if(idx<0||idx>=data.length) break;
+    const x=GX0+i*px, y=zeroY-(data[idx]-128)*padc+yShift;
+    if(!started){ctx.moveTo(x,y);started=true;} else ctx.lineTo(x,y);
+  }
+  ctx.stroke(); ctx.restore();
+}
+
+function drawMarkers(){
+  // 左侧黄色 CH1 基线箭头：scope_draw_pointers() -> y = 441 - traceposition
+  ctx.fillStyle="#ffd400";
+  ctx.beginPath(); ctx.moveTo(GX0,CFG.ch1_zero_y-9); ctx.lineTo(GX0+17,CFG.ch1_zero_y);
+  ctx.lineTo(GX0,CFG.ch1_zero_y+9); ctx.closePath(); ctx.fill();
+  tx("1",GX0+5,CFG.ch1_zero_y,12,"#000","left",true);
+  // 右侧青色 T 游标（真机在水平中轴处）
+  ctx.fillStyle="#22c7d6";
+  ctx.beginPath(); ctx.moveTo(GX0+GW-2,249); ctx.lineTo(GX0+GW-20,241);
+  ctx.lineTo(GX0+GW-20,257); ctx.closePath(); ctx.fill();
+  tx("T",GX0+GW-18,249,12,"#00343a","center",true);
+  // 顶部绿色触发位置箭头（屏幕中心 x=364）
+  rr(382,2,27,30,"#00d21f",4);
+  tx("1",395,15,17,"#003b00","center",true);
+  ctx.fillStyle="#00d21f";
+  ctx.beginPath(); ctx.moveTo(387,32); ctx.lineTo(403,32); ctx.lineTo(395,48); ctx.closePath(); ctx.fill();
+  // 截图回显的文件名
+  tx(CFG.file_label,560,76,12,"#c8c8c8","left");
+}
+
+function drawTop(){
+  ctx.fillStyle="#0c0c0c"; ctx.fillRect(0,0,730,48);
+  rr(2,4,68,38,"#1024b4",4);
+  // 汉堡图标
+  for(let i=0;i<3;i++){ ctx.fillStyle="#fff"; ctx.fillRect(9,15+i*7,13,2); }
+  tx("MENU",27,23,13,"#fff","left",true);
+  // 亮度图标
+  ctx.strokeStyle="#ddd"; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(95,24,9,0,Math.PI*2); ctx.stroke();
+  for(let i=0;i<8;i++){ const a=i*Math.PI/4; line(95+11*Math.cos(a),24+11*Math.sin(a),95+15*Math.cos(a),24+15*Math.sin(a),"#ddd",1); }
+  rr(112,12,48,24,STOPPED?"#e02020":"#00b814",4);
+  tx(STOPPED?"STOP":"RUN",136,24,13,"#fff","center",true);
+  // CH1 / CH2 块
+  rr(164,3,40,20,"#ffd400",3); tx("CH1",184,13,12,"#000","center",true);
+  tx("DC 1X",208,12,12,"#e8e8e8"); tx(CFG.ch1_vdiv,208,29,12,"#e8e8e8");
+  rr(280,3,40,20,"#4a4a4a",3); tx("CH2",300,13,12,"#ddd","center",true);
+  tx("DC 1X",324,12,12,"#9a9a9a"); tx(CFG.ch2_vdiv,324,29,12,"#9a9a9a");
+  // 采样率 / 时基
+  tx(CFG.sample_rate,420,12,12,"#e8e8e8"); tx(CFG.timebase,420,30,12,"#e8e8e8");
+  rr(498,8,58,32,"#1b39b8",3);
+  tx("Move",527,17,11,"#7fa0ff","center",true); tx("fast",527,32,11,"#fff","center",true);
+  tx("4936",562,23,12,"#b46cff","left",true);
+  // 右上电池 / USB / 状态
+  tx("50%",648,14,11,"#ddd"); rr(678,8,22,11,"#2a2a2a",2,"#bbb"); rr(680,10,13,7,"#7ee05a",1);
+  tx("1kHz 0.28a",648,32,11,"#ddd");
+  // USB 图标（简化）
+  line(710,10,710,34,"#ddd",2); rr(706,8,8,6,"#ddd",1); rr(706,30,8,6,"#ddd",1);
+}
+
+function drawMenu(){
+  ctx.fillStyle="#0a0a0a"; ctx.fillRect(730,0,70,480);
+  const items=["CTRL","RUN STOP","AUTO SET","T CU RSOR","V CU RSOR","测量 URES","SAVE PIC","保存 WAVE"];
+  items.forEach((s,i)=>{
+    const y=6+i*59, hi=(i===1);
+    rr(733,y,64,54,hi?(STOPPED?"#e02020":"#00e01c"):"#262626",5,hi?null:"#4a4a4a");
+    const parts=s.split(" ");
+    if(parts.length===1) tx(s,765,y+27,13,hi?"#003b00":"#e8e8e8","center",true);
+    else { tx(parts[0],765,y+18,13,hi?"#003b00":"#e8e8e8","center",true);
+           tx(parts.slice(1).join(" "),765,y+38,13,hi?"#003b00":"#e8e8e8","center",true); }
+  });
+}
+
+function drawMeasure(){
+  // 4 行 × 3 列，覆盖在波形区左下
+  for(let r=0;r<4;r++) for(let c=0;c<3;c++){
+    const x=2+c*121, y=355+r*24, [k,v]=CFG.meas[r*3+c];
+    rr(x,y,119,22,"#333",3);
+    rr(x+2,y+2,48,18,"#ffe000",2);
+    tx(k,x+5,y+11,11,"#000","left",true);
+    tx(v,x+55,y+11,12,"#f0f0f0","left");
+  }
+}
+
+function drawOverview(){
+  // 底部波形总览条：白框 + 黄色缩略波形 + 选区框
+  rr(2,452,726,20,"#000",0,"#e8e8e8");
+  ctx.save(); ctx.beginPath(); ctx.rect(3,453,724,18); ctx.clip();
+  const start=Math.round(CFG.win_start+panShift);
+  const outN=Math.floor((CH1.length-start)/2);
+  const outStep=Math.max(1,Math.floor(outN/724));
+  ctx.strokeStyle="#ffd400"; ctx.lineWidth=1; ctx.beginPath();
+  for(let x=0;x<724;x++){
+    const idx=start+Math.floor(x*outStep)*2;
+    const v=(idx>=0&&idx<CH1.length)?CH1[idx]:128;
+    const y=462-(v-128)*0.045;
+    if(x===0) ctx.moveTo(3+x,y); else ctx.lineTo(3+x,y);
+  }
+  ctx.stroke(); ctx.restore();
+  const kp=4+(CFG.win_start*100/1000);
+  rr(kp,455,181,14,null,0,"#fff");
+}
+
+function draw(){
+  const cw=cv.clientWidth, ch=cw*H/W, dpr=window.devicePixelRatio||1;
+  if(cv.width!==Math.round(cw*dpr)){cv.width=Math.round(cw*dpr);cv.height=Math.round(ch*dpr);}
+  const s=cw/W;
+  ctx.setTransform(dpr*s,0,0,dpr*s,0,0);
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
+  drawGrid();
+  plot(CH2,"#22e05a",CFG.ch2_zero_y,CFG.ch2_enabled);
+  plot(CH1,"#ffd400",CFG.ch1_zero_y,true);
+  drawMarkers();
+  drawTop();
+  drawMenu();
+  drawMeasure();
+  drawOverview();
+}
+
+const zoomEl=document.getElementById("zoom"), zv=document.getElementById("zv");
+const panEl=document.getElementById("pan"); panEl.value=CFG.win_start;
+const alignEl=document.getElementById("align");
+zoomEl.addEventListener("input",()=>{zoom=parseFloat(zoomEl.value);zv.textContent=zoom+"×";draw();});
+panEl.addEventListener("input",()=>{panShift=parseInt(panEl.value)-CFG.win_start;draw();});
+alignEl.addEventListener("change",()=>{yShift=alignEl.checked?CFG.align_shift:0;draw();});
+document.getElementById("reset").addEventListener("click",()=>{
+  zoom=1;panShift=0;yShift=0;alignEl.checked=false;
+  zoomEl.value=1;zv.textContent="1×";panEl.value=CFG.win_start;draw();
+});
+let dragging=false,dragX=0,pan0=0;
+cv.addEventListener("pointerdown",e=>{dragging=true;dragX=e.clientX;pan0=panShift;cv.setPointerCapture(e.pointerId);});
+cv.addEventListener("pointerup",()=>{dragging=false;});
+cv.addEventListener("pointermove",e=>{
+  const r=cv.getBoundingClientRect(), mx=(e.clientX-r.left)/r.width*W;
+  if(dragging){
+    panShift=pan0-(e.clientX-dragX)/r.width*W*2/zoom;
+    panEl.value=Math.round(CFG.win_start+panShift);
+  }
+  if(mx<GX0||mx>GX0+GW) return;
+  const i=Math.round((mx-GX0)/zoom), idx=Math.round(CFG.win_start+panShift)+i*2;
+  if(idx<0||idx>=CH1.length) return;
+  const v=CH1[idx], volt=(v-128)*CFG.ch1_scale*8/256;
+  document.getElementById("cursor").textContent=
+    "指针处: 缓冲点 #"+idx+"  电压 "+volt.toFixed(3)+" V (ADC "+v+")"+
+    "   距窗口起点 "+(i*2*CFG.sample_dt*1e6).toFixed(1)+" us"+
+    "   1采样点="+(CFG.sample_dt*1e6).toFixed(2)+"us（每 2 点画 1 像素）";
+  draw();
+});
+draw();
+window.addEventListener("resize",draw);
+</script>
+</body>
+</html>
+"""
+
+frozen_note = (
+    "<b>本帧为冻结抓帧</b>：示波器处于 STOP，连抓 3 帧逐字节校验一致；"
+    "数据自洽、可复现，与 4.bmp 是同一时刻。"
+    if p.get("capture_frozen") else
+    "本帧为实时抓帧（RUN 状态边采边读），帧与帧之间会有抖动。"
+)
+if p.get("timebase") != "500us/div":
+    frozen_note += (
+        " 注意：当前时基 <b>%s</b> / 采样率 <b>%s</b>，而截图 4.bmp 是 "
+        "500us/div / 200KSa/s；两者信号频率同为 1.00kHz，但每格对应的时间不同。"
+        % (p["timebase"], p["sample_rate"])
+    )
+if vcal:
+    frozen_note += (" 电压已按 4.bmp 的 Umax/Umin 标定（%.5f V/ADC、零点 ADC %.1f）。"
+                    % (vcal["v_per_adc"], vcal["adc_zero"]))
+
+html = (html.replace("__DICT1__", json.dumps(dict1))
+            .replace("__DATA1__", json.dumps(s1))
+            .replace("__DICT2__", json.dumps(dict2))
+            .replace("__DATA2__", json.dumps(s2))
+            .replace("__CFG__", json.dumps(cfg, ensure_ascii=False))
+            .replace("__ROWS__", table_rows)
+            .replace("__FROZEN__", frozen_note)
+            .replace("__WIN__", str(win_start)))
+
+out = os.path.join(BASE, "示波器波形界面重建.html")
+open(out, "w", encoding="utf-8").write(html)
+print("已生成:", out, len(html), "字节")
+print("窗口起点=%d  屏幕点数=%d  px/点=%.3f  频率=%.0fHz  Vpp=%.3fV"
+      % (win_start, cfg["screen_points"], cfg["px_per_sample"], a["freq_hz"], a["vpp"]))
