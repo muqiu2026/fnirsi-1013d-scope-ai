@@ -1,0 +1,41 @@
+# Build artifacts / IDE
+firmware/src/build/
+firmware/src/dist/
+firmware/src/_winbuild/
+firmware/src/nbproject/
+*.o
+*.obj
+*.elf
+*.map
+*.dis
+*.a
+
+# Raw images / large binaries — never commit
+*.img
+*.bin
+*.zip
+*.bak
+F_sdcard_backup*.img
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Local runtime junk
+live_scope.txt
+*.log
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+
+# 调试产物(截图裁剪/临时)防止再混入
+crop_*.png
+c4_*.png
+scope_view.png
+live_scope.txt

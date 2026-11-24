@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "fnirsi-scope": {
+      "command": "python",
+      "args": ["/ABS/PATH/TO/fnirsi-1013d-scope-ai/mcp/server.py", "--port", "COM26"],
+      "env": {}
+    }
+  }
+}
