@@ -1,10 +1,16 @@
 # FNIRSI 1013D 串口 AI 控制套件 · AI-Controlled FNIRSI 1013D Oscilloscope
 
+![封面](assets/cover.png)
+
+[![CI](https://github.com/muqiu2026/fnirsi-1013d-scope-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/muqiu2026/fnirsi-1013d-scope-ai/actions/workflows/ci.yml) ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg) ![Scope: FNIRSI 1013D](https://img.shields.io/badge/Scope-FNIRSI_1013D-orange) ![MCP ready](https://img.shields.io/badge/MCP-ready-blueviolet)
+
+> 🇬🇧 **English version**: [`README_EN.md`](README_EN.md)
+
 > 📖 **新手从 [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md) 开始**：开箱 → 刷机 → 认识界面 → 让 AI 接管 → AI 能拿到什么 → 实战演示 → 排错。
 
 > 🧰 **每个软件怎么用（图文并茂，含刷固件用的 `FNIRSI_Firmware_Loader.exe`）见 [`docs/SOFTWARE-GUIDE.md`](docs/SOFTWARE-GUIDE.md)**；预编译固件与刷机工具都在 **Releases**。
 
-> 🐣 **完全零基础**看 [`docs/BEGINNER.md`](docs/BEGINNER.md)；报错查 [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)；想懂原理看 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)；给 AI 调用见 [`docs/AI-USAGE.md`](docs/AI-USAGE.md)。
+> 🐣 **完全零基础**看 [`docs/BEGINNER.md`](docs/BEGINNER.md)；报错查 [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)；想懂原理看 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)；给 AI 调用见 [`docs/AI-USAGE.md`](docs/AI-USAGE.md)；**直接复制给 AI 的系统提示词模板**见 [`docs/AI-PROMPT.md`](docs/AI-PROMPT.md)。
 > ⚡ **一键跑通**：Windows `powershell -ExecutionPolicy Bypass -File .\run.ps1`；macOS/Linux `bash run.sh`（装依赖→自检→读数→截图）。
 
 > 让 AI / 程序**直接操作**一台 FNIRSI / ADS 1013D 平板示波器，并读取**与屏幕逐字一致**的测量值、波形和整屏截图，实现"边看波形边调硬件"的自动化测试闭环。
