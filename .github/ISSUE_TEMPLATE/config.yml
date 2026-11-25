@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 提问 / 讨论 / 分享用法 (Discussions)
+    url: https://github.com/muqiu2026/fnirsi-1013d-scope-ai/discussions
+    about: 上手问题、玩法交流、不确定是不是 bug 都先来这里
+  - name: 📘 先读文档 BEGINNER / GETTING-STARTED / TROUBLESHOOTING
+    url: https://github.com/muqiu2026/fnirsi-1013d-scope-ai/tree/main/docs
+    about: 大部分"打不开 COM 口 / 读数跳 / 屏幕跳闪"在此已覆盖
+  - name: 🛠 固件上游问题 (Atlan4 社区)
+    url: https://github.com/Atlan4/Fnirsi1013D
+    about: 与本项目改造无关的上游固件/硬件问题请去上游
+  - name: 📡 EEVBlog 论坛帖
+    url: https://www.eevblog.com/forum/testgear/fnirsi-1013d-100mhz-tablet-oscilloscope/
+    about: 1013D 社区大帖（刷机/loader 讨论多在此）
