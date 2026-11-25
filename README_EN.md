@@ -8,6 +8,8 @@ This repo ships: the **modified scope firmware source**, the **serial protocol**
 
 ![cover](assets/cover.png)
 
+<p align="center"><img src="assets/poster.png" width="360" alt="project poster"></p>
+
 ---
 
 ## 1. Hardware & SoC

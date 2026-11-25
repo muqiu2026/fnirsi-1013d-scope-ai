@@ -2,6 +2,8 @@
 
 ![封面](assets/cover.png)
 
+<p align="center"><img src="assets/poster.png" width="360" alt="项目宣传海报"></p>
+
 [![CI](https://github.com/muqiu2026/fnirsi-1013d-scope-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/muqiu2026/fnirsi-1013d-scope-ai/actions/workflows/ci.yml) ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg) ![Scope: FNIRSI 1013D](https://img.shields.io/badge/Scope-FNIRSI_1013D-orange) ![MCP ready](https://img.shields.io/badge/MCP-ready-blueviolet)
 
 > 🇬🇧 **English version**: [`README_EN.md`](README_EN.md)
